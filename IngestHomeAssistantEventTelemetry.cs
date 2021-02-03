@@ -14,7 +14,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
-namespace JTH_Smart_Space_AzureFunctions
+namespace JTHSmartSpace.AzureFunctions
 {
     public static class IngestHomeAssistantEventTelemetry
     {
