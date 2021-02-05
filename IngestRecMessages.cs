@@ -1,90 +1,71 @@
 // Default URL for triggering event grid function in the local environment.
 // http://localhost:7071/runtime/webhooks/EventGrid?functionName={functionname}
 using System;
-using System.Collections.Generic;
 using System.Net.Http;
 using Azure.Identity;
 using Azure.DigitalTwins.Core;
 using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Azure.EventGrid.Models;
 using Microsoft.Azure.WebJobs.Extensions.EventGrid;
 using Microsoft.Extensions.Logging;
 using Azure.Core.Pipeline;
-using System.Text;
 using Newtonsoft.Json.Linq;
 using Azure.DigitalTwins.Core.Serialization;
 using Newtonsoft.Json;
 using RealEstateCore;
-using System.Linq;
 
 namespace JTHSmartSpace.AzureFunctions
 {
     public static class IngestRecMessages
     {
-        private static readonly string adtInstanceUrl = Environment.GetEnvironmentVariable("ADT_SERVICE_URL");
+
         private static readonly HttpClient httpClient = new HttpClient();
+        private static readonly string adtServiceUrl = Environment.GetEnvironmentVariable("ADT_SERVICE_URL");
 
         [FunctionName("IngestRecMessages")]
         public static async void Run([EventGridTrigger] EventGridEvent eventGridEvent, ILogger log)
         {
-            if (adtInstanceUrl == null) log.LogError("Application setting \"ADT_SERVICE_URL\" not set");
+            if (adtServiceUrl == null) {
+                log.LogError("Application setting \"ADT_SERVICE_URL\" not set");
+                return;
+            }
 
-            var exceptions = new List<Exception>();
-
-            //Authenticate with Digital Twins
-            ManagedIdentityCredential cred = new ManagedIdentityCredential("https://digitaltwins.azure.net");
-            DigitalTwinsClient client = new DigitalTwinsClient(new Uri(adtInstanceUrl), cred, new DigitalTwinsClientOptions
-            {
+            DefaultAzureCredential credentials = new DefaultAzureCredential();
+            DigitalTwinsClient dtClient = new DigitalTwinsClient(new Uri(adtServiceUrl), credentials, new DigitalTwinsClientOptions{
                 Transport = new HttpClientTransport(httpClient)
             });
 
-            // Unpack message payload
             JObject payload = (JObject)JsonConvert.DeserializeObject(eventGridEvent.Data.ToString());
-            string recMessageBody = (string)payload["body"];
+            if (payload.ContainsKey("body")) {
+                JObject payloadBody = (JObject)payload["body"];
 
-            RecEdgeMessage recMessage = JsonConvert.DeserializeObject<RecEdgeMessage>(recMessageBody);
-            log.LogInformation(recMessage.ToString());
+                if (payloadBody.ContainsKey("format") && ((string)payloadBody["format"]).StartsWith("rec3.2")) {
+                    RecEdgeMessage recMessage = JsonConvert.DeserializeObject<RecEdgeMessage>(payloadBody.ToString());
+                    foreach (Observation observation in recMessage.observations)
+                    {
+                        Uri sensorId = observation.sensorId;
+                        string twinId = sensorId.AbsolutePath.TrimStart('/').Replace(":","");
 
-            foreach (Observation observation in recMessage.observations)
-            {
-                log.LogInformation($"Sensor: {observation.sensorId.AbsoluteUri}\tQuantityKind: {observation.quantityKind.AbsoluteUri}");
+                        UpdateOperationsUtility uou = new UpdateOperationsUtility();
+                        if (observation.numericValue.HasValue) {
+                            uou.AppendReplaceOp("/hasValue", observation.numericValue.Value);
+                        }
+                        else if (observation.booleanValue.HasValue) {
+                            uou.AppendReplaceOp("/hasValue", observation.booleanValue.Value);
+                        }
+                        else {
+                            uou.AppendReplaceOp("/hasValue", observation.stringValue);
+                        }
 
-                try
-                {
-                    Uri sensorId = observation.sensorId;
-                    string twinId = sensorId.AbsolutePath.TrimStart('/').Replace(":","");
-
-                    UpdateOperationsUtility uou = new UpdateOperationsUtility();
-                    if (observation.numericValue.HasValue) {
-                        uou.AppendReplaceOp("/hasValue", observation.numericValue.Value);
+                        try {
+                            log.LogInformation($"Updating twin '{twinId}' with operation '{uou.Serialize()}'");
+                            await dtClient.UpdateDigitalTwinAsync(twinId, uou.Serialize());
+                        }
+                        catch (Exception ex) {
+                            log.LogError(ex, ex.Message);
+                        }
                     }
-                    else if (observation.booleanValue.HasValue) {
-                        uou.AppendReplaceOp("/hasValue", observation.booleanValue.Value);
-                    }
-                    else {
-                        uou.AppendReplaceOp("/hasValue", observation.stringValue);
-                    }
-
-                    await client.UpdateDigitalTwinAsync(twinId, uou.Serialize());
                 }
-                catch (Exception e)
-                {
-                    // We need to keep processing the rest of the batch - capture this exception and continue.
-                    // Also, consider capturing details of the message that failed processing so it can be processed again later.
-                    exceptions.Add(e);
-                }
-            }
-
-            // Once processing of the batch is complete, if any messages in the batch failed processing throw an exception so that there is a record of the failure.
-            if (exceptions.Count > 1)
-            {
-                throw new AggregateException(exceptions);
-            }
-
-            if (exceptions.Count == 1)
-            {
-                throw exceptions.Single();
             }
         }
     }
