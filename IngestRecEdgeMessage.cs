@@ -16,13 +16,13 @@ using RealEstateCore;
 
 namespace JTHSmartSpace.AzureFunctions
 {
-    public static class IngestRecMessages
+    public static class IngestRecEdgeMessage
     {
 
         private static readonly HttpClient httpClient = new HttpClient();
         private static readonly string adtServiceUrl = Environment.GetEnvironmentVariable("ADT_SERVICE_URL");
 
-        [FunctionName("IngestRecMessages")]
+        [FunctionName("IngestRecEdgeMessage")]
         public static async void Run([EventGridTrigger] EventGridEvent eventGridEvent, ILogger log)
         {
             if (adtServiceUrl == null) {
