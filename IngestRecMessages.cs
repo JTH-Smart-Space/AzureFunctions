@@ -48,13 +48,13 @@ namespace JTHSmartSpace.AzureFunctions
 
                         UpdateOperationsUtility uou = new UpdateOperationsUtility();
                         if (observation.numericValue.HasValue) {
-                            uou.AppendReplaceOp("/hasValue", observation.numericValue.Value);
+                            uou.AppendReplaceOp("/lastValue", observation.numericValue.Value);
                         }
                         else if (observation.booleanValue.HasValue) {
-                            uou.AppendReplaceOp("/hasValue", observation.booleanValue.Value);
+                            uou.AppendReplaceOp("/lastValue", observation.booleanValue.Value);
                         }
                         else {
-                            uou.AppendReplaceOp("/hasValue", observation.stringValue);
+                            uou.AppendReplaceOp("/lastValue", observation.stringValue);
                         }
 
                         try {
