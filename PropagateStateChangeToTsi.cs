@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using System.Net.Http;
 using System;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Azure.EventHubs;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Extensions.Logging;
@@ -43,50 +44,54 @@ namespace JTHSmartSpace.AzureFunctions
             JObject message = (JObject)JsonConvert.DeserializeObject(Encoding.UTF8.GetString(myEventHubMessage.Body));
             log.LogInformation($"Reading event: '{message}' from twin '{twinId}'.");
 
-            bool twinIsState = await TwinIsState(twinId);
+            // Retrieve twin that caused message to be sent; we need it's name for the TSI message
+            Response<BasicDigitalTwin> twinResponse = await dtClient.GetDigitalTwinAsync<BasicDigitalTwin>(twinId);
+            BasicDigitalTwin twin = twinResponse.Value;
 
-            // TODO: Only execute the below (propagating data into TSI) if the updated twin is an instance of the State interface
-
-            // Read values that are replaced or added
-            var tsiUpdate = new Dictionary<string, object>();
-            foreach (var operation in message["patch"])
-            {
-                if (operation["op"].ToString() == "replace" || operation["op"].ToString() == "add")
-                {
-                    //Convert from JSON patch path to a flattened property for TSI
-                    //Example input: /Front/Temperature
-                    //        output: Front.Temperature
-                    string path = operation["path"].ToString().Substring(1);
-                    path = path.Replace("/", ".");
-                    tsiUpdate.Add(path, operation["value"]);
-                }
+            // Extract name of capability twin 
+            string tsiProperty = "";
+            if (twin.Contents.ContainsKey("name") && twin.Contents["name"] is JsonElement) {
+                tsiProperty = ((JsonElement)twin.Contents["name"]).ToString().Trim();
             }
-            // Send an update if updates exist
-            if (tsiUpdate.Count > 0)
-            {
-                tsiUpdate.Add("$dtId", myEventHubMessage.Properties["cloudEvents:subject"]);
-                await outputEvents.AddAsync(JsonConvert.SerializeObject(tsiUpdate));
+            // Retrieve twin that this capability applies to; construct TSI payload with this as path
+            string capabilityParentId = await FindCapabilityParentAsync(twinId, log);
+
+            // If we have both a capability parent id and a TSI property, proceed to create TSI event
+            if (tsiProperty != "" && capabilityParentId != null) {
+                var tsiUpdate = new Dictionary<string, object>();
+                foreach (var operation in message["patch"])
+                {
+                    if (operation["op"].ToString() == "replace" || operation["op"].ToString() == "add")
+                    {
+                        tsiUpdate.Add(tsiProperty, operation["value"]);
+                    }
+                }
+                // Send an update if updates exist
+                if (tsiUpdate.Count > 0)
+                {
+                    tsiUpdate.Add("$dtId", capabilityParentId);
+                    log.LogInformation($"SENDING: {JsonConvert.SerializeObject(tsiUpdate)}");
+                    await outputEvents.AddAsync(JsonConvert.SerializeObject(tsiUpdate));
+                }
             }
         }
 
-        private static async Task<bool> TwinIsState(string twinId) {
-            string stateQuery = $"SELECT State FROM DIGITALTWINS State WHERE IS_OF_MODEL('dtmi:digitaltwins:rec_3_3:core:State;1') AND State.$dtId = '{twinId}'";
-            AsyncPageable<string> results = dtClient.QueryAsync(stateQuery);
-            bool matchingQueryResult = false;
+        public static async Task<string> FindCapabilityParentAsync(string capability, ILogger log)
+        {
+            // Find parent to which the capability applies, using isCapabilityOf relationships
             try
             {
-                await foreach(string twin in results)
+                AsyncPageable<BasicRelationship> rels = dtClient.GetRelationshipsAsync<BasicRelationship>(capability, "isCapabilityOf");
+                await foreach (BasicRelationship relationship in rels)
                 {
-                    matchingQueryResult = true;
-                    break;
+                    return relationship.TargetId;
                 }
             }
-            catch (RequestFailedException ex)
+            catch (RequestFailedException exc)
             {
-                Console.WriteLine($"Error {ex.Status}, {ex.ErrorCode}, {ex.Message}");
-                throw;
+                log.LogInformation($"*** Error in retrieving capability parent:{exc.Status}:{exc.Message}");
             }
-            return matchingQueryResult;
+            return null;
         }
     }
 }

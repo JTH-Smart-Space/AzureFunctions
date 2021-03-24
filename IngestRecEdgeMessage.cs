@@ -10,7 +10,7 @@ using Microsoft.Azure.WebJobs.Extensions.EventGrid;
 using Microsoft.Extensions.Logging;
 using Azure.Core.Pipeline;
 using Newtonsoft.Json.Linq;
-using Azure.DigitalTwins.Core.Serialization;
+using Azure;
 using Newtonsoft.Json;
 using RealEstateCore;
 
@@ -46,20 +46,20 @@ namespace JTHSmartSpace.AzureFunctions
                         Uri sensorId = observation.sensorId;
                         string twinId = sensorId.AbsolutePath.TrimStart('/').Replace(":","");
 
-                        UpdateOperationsUtility uou = new UpdateOperationsUtility();
+                        var updateTwinData = new JsonPatchDocument();
                         if (observation.numericValue.HasValue) {
-                            uou.AppendReplaceOp("/lastValue", observation.numericValue.Value);
+                            updateTwinData.AppendAdd("/lastValue", observation.numericValue.Value);
                         }
                         else if (observation.booleanValue.HasValue) {
-                            uou.AppendReplaceOp("/lastValue", observation.booleanValue.Value);
+                            updateTwinData.AppendAdd("/lastValue", observation.booleanValue.Value);
                         }
                         else {
-                            uou.AppendReplaceOp("/lastValue", observation.stringValue);
+                            updateTwinData.AppendAdd("/lastValue", observation.stringValue);
                         }
 
                         try {
-                            log.LogInformation($"Updating twin '{twinId}' with operation '{uou.Serialize()}'");
-                            await dtClient.UpdateDigitalTwinAsync(twinId, uou.Serialize());
+                            log.LogInformation($"Updating twin '{twinId}' with operation '{updateTwinData.ToString()}'");
+                            await dtClient.UpdateDigitalTwinAsync(twinId, updateTwinData);
                         }
                         catch (Exception ex) {
                             log.LogError(ex, ex.Message);
