@@ -53,11 +53,9 @@ namespace JTHSmartSpace.AzureFunctions
             if (twin.Contents.ContainsKey("name") && twin.Contents["name"] is JsonElement) {
                 tsiProperty = ((JsonElement)twin.Contents["name"]).ToString().Trim();
             }
-            // Retrieve twin that this capability applies to; construct TSI payload with this as path
-            string capabilityParentId = await FindCapabilityParentAsync(twinId, log);
 
             // If we have both a capability parent id and a TSI property, proceed to create TSI event
-            if (tsiProperty != "" && capabilityParentId != null) {
+            if (tsiProperty != "") {
                 var tsiUpdate = new Dictionary<string, object>();
                 foreach (var operation in message["patch"])
                 {
@@ -69,14 +67,14 @@ namespace JTHSmartSpace.AzureFunctions
                 // Send an update if updates exist
                 if (tsiUpdate.Count > 0)
                 {
-                    tsiUpdate.Add("$dtId", capabilityParentId);
+                    tsiUpdate.Add("$dtId", twinId);
                     log.LogInformation($"SENDING: {JsonConvert.SerializeObject(tsiUpdate)}");
                     await outputEvents.AddAsync(JsonConvert.SerializeObject(tsiUpdate));
                 }
             }
         }
 
-        public static async Task<string> FindCapabilityParentAsync(string capability, ILogger log)
+        private static async Task<string> FindCapabilityParentAsync(string capability, ILogger log)
         {
             // Find parent to which the capability applies, using isCapabilityOf relationships
             try
