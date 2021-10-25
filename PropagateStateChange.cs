@@ -115,8 +115,18 @@ namespace JTHSmartSpace.AzureFunctions
             Response<BasicDigitalTwin> parentTwinResponse = await dtClient.GetDigitalTwinAsync<BasicDigitalTwin>(parentTwinId);
             BasicDigitalTwin parentTwin = parentTwinResponse.Value;
             
-            // TODO: Based on parent twin, get Azure Maps Feature ID (either from ADT model using externalIds property, or by querying Azure Maps feature service )
-            string AzureMapsFeatureID = "NONEXISTENT_FIXME";
+            // Based on parent twin, get Azure Maps Feature ID (from ADT model using externalIds property w/ AzureMaps key)
+            string AzureMapsFeatureID = "";
+            if (parentTwin.Contents.ContainsKey("externalIds") && parentTwin.Contents["externalIds"] is JsonElement) {
+                JsonElement externalIds = (JsonElement)parentTwin.Contents["externalIds"];
+                if (externalIds.TryGetProperty("AzureMaps", out JsonElement AzureMapsIdElement)) {
+                    AzureMapsFeatureID = AzureMapsIdElement.GetString();
+                }
+            }
+            if (string.IsNullOrEmpty(AzureMapsFeatureID)) {
+                log.LogError($"Parent twin {parentTwin} does not have externalIds/AzureMaps set.");
+                return;
+            }
 
             // Load the Azure Maps stateset ID (configured in an env. variable JSON fragment) that corresponds to this capability name
             if (!azureMapsStateSets.ContainsKey(capabilityName)) {
@@ -135,10 +145,10 @@ namespace JTHSmartSpace.AzureFunctions
                             new JProperty("value", capabilityValue.ToString()),
                             new JProperty("eventTimestamp", DateTime.UtcNow.ToString("s"))))));
 
-            var response = await httpClient.PostAsync(
-            $"https://us.atlas.microsoft.com/featureState/state?api-version=1.0&statesetID={statesetID}&featureID={AzureMapsFeatureID}&subscription-key={azureMapsSubscriptionKey}",
-            new StringContent(postcontent.ToString()));
-
+            var response = await httpClient.PutAsync(
+                $"https://eu.atlas.microsoft.com/featurestatesets/{statesetID}/featureStates/{AzureMapsFeatureID}?api-version=2.0&subscription-key={azureMapsSubscriptionKey}",
+                new StringContent(postcontent.ToString())
+            );
             log.LogInformation($"Azure Maps response:\n\t" + await response.Content.ReadAsStringAsync());
         }
 
