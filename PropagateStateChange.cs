@@ -23,10 +23,9 @@ namespace JTHSmartSpace.AzureFunctions
         private static readonly HttpClient httpClient = new HttpClient();
         private static readonly string adtServiceUrl = Environment.GetEnvironmentVariable("ADT_SERVICE_URL");
 
-        private static readonly string azureMapsSubscriptionKey = Environment.GetEnvironmentVariable("AZURE_MAPS_SUB_KEY");
-        private static readonly string azureMapsStatesetsVariable = Environment.GetEnvironmentVariable("AZURE_MAPS_STATESETS");
-
-        private static readonly JObject azureMapsStateSets = JObject.Parse(azureMapsStatesetsVariable);
+        //private static readonly string azureMapsSubscriptionKey = Environment.GetEnvironmentVariable("AZURE_MAPS_SUB_KEY");
+        //private static readonly string azureMapsStatesetsVariable = Environment.GetEnvironmentVariable("AZURE_MAPS_STATESETS");
+        //private static readonly JObject azureMapsStateSets = JObject.Parse(azureMapsStatesetsVariable);
 
         private static DigitalTwinsClient dtClient;
 
@@ -95,9 +94,10 @@ namespace JTHSmartSpace.AzureFunctions
             await PropagateStateToTSI(capabilityTwinId, capabilityName, capabilityValue, outputEvents, log);
 
             // And also to Azure Maps
-            await PropagateStateToAzureMapsAsync(capabilityTwinId, capabilityName, capabilityValue, log);
+            // await PropagateStateToAzureMapsAsync(capabilityTwinId, capabilityName, capabilityValue, log);
         }
 
+        /*
         private static async Task PropagateStateToAzureMapsAsync(string capabilityTwinId, string capabilityName, JToken capabilityValue, ILogger log) {
             
             // Find parent to which the capability applies, using isCapabilityOf relationships
@@ -151,6 +151,7 @@ namespace JTHSmartSpace.AzureFunctions
             );
             log.LogInformation($"Azure Maps response:\n\t" + await response.Content.ReadAsStringAsync());
         }
+        */
 
         private static async Task PropagateStateToTSI(string capabilityTwinId, string capabilityName, JToken capabilityValue, IAsyncCollector<string> outputEvents, ILogger log) {
             var tsiUpdate = new Dictionary<string, object>();
