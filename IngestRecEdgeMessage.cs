@@ -2,6 +2,7 @@
 // http://localhost:7071/runtime/webhooks/EventGrid?functionName={functionname}
 using System;
 using System.Net.Http;
+using System.Threading.Tasks;
 using Azure.Identity;
 using Azure.DigitalTwins.Core;
 using Microsoft.Azure.WebJobs;
@@ -16,14 +17,14 @@ using RealEstateCore;
 
 namespace JTHSmartSpace.AzureFunctions
 {
-    public static class IngestRecEdgeMessage
+    public class IngestRecEdgeMessage
     {
 
         private static readonly HttpClient httpClient = new HttpClient();
         private static readonly string adtServiceUrl = Environment.GetEnvironmentVariable("ADT_SERVICE_URL");
 
         [FunctionName("IngestRecEdgeMessage")]
-        public static async void Run([EventGridTrigger] EventGridEvent eventGridEvent, ILogger log)
+        public async Task Run([EventGridTrigger] EventGridEvent eventGridEvent, ILogger log)
         {
             if (adtServiceUrl == null) {
                 log.LogError("Application setting \"ADT_SERVICE_URL\" not set");
