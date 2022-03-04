@@ -14,7 +14,7 @@ namespace RealEstateCore
         [JsonProperty("valueBoolean")]
         public bool? booleanValue { get; set; }
         public Uri quantityKind { get; set; }
-        public Uri sensorId { get; set; }
+        public string sensorId { get; set; }
     }
 
     public class RecEdgeMessage

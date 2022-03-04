@@ -44,8 +44,7 @@ namespace JTHSmartSpace.AzureFunctions
                     RecEdgeMessage recMessage = JsonConvert.DeserializeObject<RecEdgeMessage>(payloadBody.ToString());
                     foreach (Observation observation in recMessage.observations)
                     {
-                        Uri sensorId = observation.sensorId;
-                        string twinId = sensorId.AbsolutePath.TrimStart('/').Replace(":","");
+                        string twinId = observation.sensorId.Replace(":","");
 
                         var updateTwinData = new JsonPatchDocument();
                         if (observation.numericValue.HasValue) {
